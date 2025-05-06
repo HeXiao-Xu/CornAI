@@ -1,0 +1,115 @@
+/* auth.css */
+body {
+    margin: 0;
+    padding: 0;
+    height: 100vh;
+    position: relative;
+    font-family: 'Helvetica Neue', Arial, sans-serif;
+}
+
+.background {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: url('../images/assistant-avatar.jpg') no-repeat center center;
+    background-size: cover;
+    /*filter: brightness(0.9);*/
+    z-index: 0;
+}
+
+/* 透明表单容器（移除毛玻璃效果） */
+.auth-container {
+    position: relative;
+    z-index: 2;
+    background: transparent; /* 完全透明 */
+    width: 100%;
+    max-width: 400px;
+    padding: 40px;
+    margin: 100px auto;
+    text-align: center; /* 让内容居中 */
+}
+
+h2 {
+    color: #2c3e50;
+    text-align: center;
+    margin-bottom: 30px;
+    font-size: 28px;
+}
+
+/* 增强输入框的可见性 */
+.input-group {
+    margin-bottom: 25px;
+    /*background: rgba(255, 255, 255, 0.3); !* 输入框轻微白色背景 *!*/
+    background: transparent; /* 输入框完全透明 */
+    border-radius: 8px;
+    padding: 5px;
+}
+
+
+
+input[type="tel"],
+input[type="password"] {
+    width: 100%;
+    padding: 14px;
+    background: transparent; /* 输入框完全透明 */
+    border: 2px solid rgba(255, 255, 255, 0.5); /* 半透明白色边框 */
+    border-radius: 8px;
+    font-size: 16px;
+    color: white; /* 白色文字 */
+    transition: all 0.3s ease;
+}
+
+
+/* 修改placeholder颜色 */
+input::placeholder {
+    color: rgba(255, 255, 255, 0.7);
+}
+
+/* 增强文字对比度 */
+h2, .auth-link a {
+    color: white;
+    text-shadow: 0 1px 3px rgba(0, 0, 0, 0.5); /* 文字阴影增强可读性 */
+}
+
+
+.auth-link {
+    text-align: center;
+    margin-top: 20px;
+}
+
+.auth-link a {
+    color: #7f8c8d;
+    text-decoration: none;
+    font-size: 14px;
+}
+
+
+.auth-link span:hover {
+    color: #2980b9;
+}
+
+.auth-link span {
+    color: #aad3ff;
+    font-weight: 500;
+}
+
+/* 登录按钮放大并居中 */
+.btn-primary {
+    display: block; /* 使按钮独占一行 */
+    width: 50%; /* 缩小宽度 */
+    padding: 16px; /* 增加内边距 */
+    margin: 30px auto; /* 上下30px，左右自动居中 */
+    background: rgba(255, 255, 255, 0.2);
+    border: 1px solid white;
+    color: white;
+    font-size: 18px; /* 放大字体 */
+    border-radius: 25px; /* 更圆的边框 */
+    cursor: pointer;
+    transition: all 0.3s ease;
+}
+
+.btn-primary:hover {
+    background: rgba(255, 255, 255, 0.3);
+}

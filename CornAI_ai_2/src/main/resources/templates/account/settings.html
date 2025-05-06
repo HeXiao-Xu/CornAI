@@ -1,0 +1,24 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head>
+  <title>账户设置</title>
+  <link rel="stylesheet" th:href="@{/css/auth.css}">
+</head>
+<body>
+<div class="settings-container">
+  <h2>账户设置</h2>
+  <div id="accountInfo">
+    <p>手机号：<span id="phoneNumber"></span></p>
+    <div class="theme-select">
+      <label>主题偏好：</label>
+      <select id="themeSelect" onchange="updateTheme(this.value)">
+        <option value="light">明亮模式</option>
+        <option value="dark">暗黑模式</option>
+      </select>
+    </div>
+  </div>
+  <button onclick="location.href='/chat'">返回聊天</button>
+</div>
+<script th:src="@{/js/account.js}"></script>
+</body>
+</html>

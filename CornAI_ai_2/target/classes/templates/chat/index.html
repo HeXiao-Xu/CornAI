@@ -1,0 +1,700 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head>
+    <title>智能问答</title>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="stylesheet" th:href="@{/css/chat.css}">
+</head>
+<body>
+<div class="chat-container">
+    <!-- 侧边栏：会话管理 -->
+    <div class="sidebar">
+        <div class="session-header">
+            <h3>会话列表</h3>
+            <button id="newSessionBtn">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M12 4V20M4 12H20" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                </svg>
+                新建会话
+            </button>
+        </div>
+        <div id="sessionList" class="session-list"></div>
+        <div class="sidebar-footer">
+            <div class="profile-trigger" onclick="toggleProfileModal()">
+                <img class="user-avatar" src="/images/user-avatar.png">
+                <span>个人信息</span>
+            </div>
+        </div>
+
+    </div>
+
+    <!-- 主聊天区 -->
+    <div class="main-chat">
+        <div id="messageHistory" class="message-history"></div>
+
+        <!-- 固定底部的输入框 -->
+        <div class="input-area">
+            <input type="text" id="messageInput" placeholder="输入消息..."
+                   onkeypress="if(event.key === 'Enter') sendMessage()">
+            <button onclick="sendMessage()">发送</button>
+        </div>
+    </div>
+</div>
+
+<!-- 新建会话弹窗 -->
+<div id="sessionModal" class="modal">
+    <div class="modal-content">
+        <span class="close">&times;</span>
+        <h3>新建会话</h3>
+        <input type="text" id="sessionNameInput" placeholder="输入会话名称">
+        <button onclick="createNewSession()">创建</button>
+    </div>
+</div>
+
+<!-- 修改后的个人信息弹窗 -->
+<div id="profileModal" class="modal">
+    <div class="profile-modal-content">
+        <span class="close" onclick="closeProfileModal()">&times;</span>
+        <div class="profile-header">
+            <img id="profileAvatar" class="profile-avatar" src="/images/user-avatar.png">
+            <div class="profile-info">
+                <p id="profilePhone" class="phone-number">手机号：加载中...</p>
+            </div>
+        </div>
+        <div class="profile-actions">
+            <button class="action-btn" onclick="handleClearHistory()">🗑️ 清空所有对话记录</button>
+            <button class="action-btn" onclick="showAgreement('user')">📜 用户协议</button>
+            <button class="action-btn" onclick="showAgreement('privacy')">🔒 隐私政策</button>
+            <button class="action-btn" onclick="showAgreement('permissions')">📱 应用权限</button>
+            <button class="action-btn" onclick="showContact()">📞 联系我们</button>
+            <button class="action-btn" onclick="handleLogout()">🚪 退出登录</button>
+            <button class="action-btn" onclick="handleDeleteAccount()">⛔ 注销账户</button>
+        </div>
+    </div>
+</div>
+
+
+
+<script th:inline="javascript">
+    let currentSessionId = null;
+    let currentSessionName = null;
+
+    document.addEventListener('DOMContentLoaded', () => {
+        if (!localStorage.getItem('userId')) {
+            localStorage.setItem('userId', 'user_' + Math.random().toString(36).substr(2, 9));
+        }
+        loadSessions();
+        setupModal();
+    });
+
+    function setupModal() {
+        const modal = document.getElementById("sessionModal");
+        const btn = document.getElementById("newSessionBtn");
+        const span = document.getElementsByClassName("close")[0];
+
+        btn.onclick = () => {
+            document.getElementById("sessionNameInput").value = "";
+            modal.style.display = "flex";
+            document.body.style.overflow = "hidden";
+        };
+        span.onclick = () => {
+            modal.style.display = "none";
+            document.body.style.overflow = "auto";
+        };
+        window.onclick = (event) => {
+            if (event.target === modal) {
+                modal.style.display = "none";
+                document.body.style.overflow = "auto";
+            }
+        };
+    }
+
+    // 加载会话列表
+    function loadSessions() {
+        fetch('/api/chat/sessions', {
+            headers: { 'X-User-ID': localStorage.getItem('userId') }
+        })
+            .then(response => {
+                if (!response.ok) throw new Error('获取会话失败');
+                return response.json();
+            })
+            .then(sessions => {
+                const container = document.getElementById('sessionList');
+                container.innerHTML = sessions.map(session => `
+            <div class="session-item" data-id="${session.sessionId}">
+                <div class="session-info" onclick="selectSession('${session.sessionId}', '${escapeHtml(session.name)}')">
+                    <h4>${escapeHtml(session.name)}</h4>
+                    <span>${new Date(session.createTime).toLocaleString()}</span>
+                </div>
+
+                <!-- 操作菜单 -->
+                <div class="session-menu">
+                    <button class="menu-trigger" onclick="event.stopPropagation();toggleMenu(event, '${session.sessionId}')">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                            <circle cx="12" cy="12" r="1" transform="rotate(90 12 12)"/>
+                            <circle cx="12" cy="6" r="1"/>
+                            <circle cx="12" cy="18" r="1"/>
+                        </svg>
+                    </button>
+                    <div class="menu-dropdown" id="menu-${session.sessionId}">
+                        <button onclick="event.stopPropagation();renameSession('${session.sessionId}')">✏️ 重命名</button>
+                        <button onclick="event.stopPropagation();deleteSession('${session.sessionId}')">🗑️ 删除</button>
+                    </div>
+                </div>
+            </div>
+        `).join('');
+
+                // 默认选择第一个会话
+                if (sessions.length > 0 && !currentSessionId) {
+                    selectSession(sessions[0].sessionId, sessions[0].name);
+                }
+            })
+            .catch(error => {
+                console.error('加载会话列表失败:', error);
+                alert('加载会话列表失败，请刷新页面');
+            });
+    }
+
+    function renderSessions(sessions) {
+        const container = document.getElementById('sessionList');
+        container.innerHTML = sessions.map(session => `
+            <div class="session-item ${currentSessionId === session.sessionId ? 'active' : ''}"
+                 data-id="${session.sessionId}"
+                 onclick="selectSession('${session.sessionId}', '${escapeHtml(session.name)}')">
+                <h4>${escapeHtml(session.name)}</h4>
+                <span>${new Date(session.createTime).toLocaleString()}</span>
+            </div>
+        `).join('');
+    }
+
+    function selectSession(sessionId, sessionName) {
+        currentSessionId = sessionId;
+        currentSessionName = sessionName;
+        document.getElementById('messageHistory').innerHTML = `
+            <div class="session-title">当前会话: ${escapeHtml(sessionName)}</div>
+        `;
+        loadHistory(sessionId);
+        document.querySelectorAll('.session-item').forEach(item => {
+            item.classList.toggle('active', item.dataset.id === sessionId);
+        });
+    }
+
+    function loadHistory(sessionId) {
+        fetch(`/api/chat/${sessionId}/history`, {
+            headers: { 'X-User-ID': localStorage.getItem('userId') }
+        })
+            .then(response => response.json())
+            .then(history => {
+                history.forEach(msg => {
+                    const [role, content] = msg.split(': ');
+                    appendMessage(role, content);
+                });
+            })
+            .catch(error => console.error('加载历史消息失败:', error));
+    }
+
+    function createNewSession() {
+        const name = document.getElementById("sessionNameInput").value.trim();
+        if (!name) {
+            alert("会话名称不能为空");
+            return;
+        }
+
+        fetch('/api/sessions', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-User-ID': localStorage.getItem('userId')
+            },
+            body: JSON.stringify({ name })
+        })
+            .then(async response => {
+                if (!response.ok) {
+                    const errorText = await response.text();
+                    throw new Error(errorText || '创建失败');
+                }
+                return response.json(); // 确保返回的是JSON
+            })
+            .then(data => {
+                if (!data || !data.sessionId) {
+                    throw new Error("无效的响应格式");
+                }
+
+                document.getElementById('sessionModal').style.display = 'none';
+                loadSessions(); // 重新加载会话列表
+
+                // 自动选择新创建的会话
+                selectSession(data.sessionId, name);
+            })
+            .catch(error => {
+                console.error("创建会话失败:", error);
+                alert(`创建会话失败: ${error.message.replace('Error: ', '')}`);
+            });
+    }
+
+
+
+    function sendMessage() {
+        const input = document.getElementById('messageInput');
+        const message = input.value.trim();
+        const userId = localStorage.getItem('userId');
+
+        if (!message) {
+            appendMessage('system', '消息内容不能为空');
+            return;
+        }
+        if (!currentSessionId) {
+            appendMessage('system', '请先选择或创建一个会话');
+            return;
+        }
+        if (!userId) {
+            appendMessage('system', '用户未登录');
+            return;
+        }
+
+        // 显示用户消息
+        appendMessage('user', message);
+        input.value = '';
+
+        // 添加思考状态提示
+        const pendingMsg = appendPendingMessage();
+
+        fetch('/api/chat/messages', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-User-ID': userId
+            },
+            body: JSON.stringify({
+                sessionId: currentSessionId,
+                message: message,
+                stream: false
+            })
+        })
+            .then(async response => {
+                if (!response.ok) throw new Error('服务器错误: ' + await response.text());
+                const data = await response.json();
+                if (data.error) throw new Error(data.error);
+
+                // 关键修改：确保先移除临时消息再添加新消息
+                if (pendingMsg && pendingMsg.remove) {
+                    pendingMsg.remove();
+                }
+                appendMessage('assistant', data.answer);
+            })
+            .catch(error => {
+                // 更新思考状态为错误信息
+                updatePendingMessage(pendingMsg, `发送失败: ${error.message.replace('服务器错误: ', '')}`);
+            });
+    }
+
+    // 新增：添加思考中的临时消息
+    function appendPendingMessage() {
+        const historyDiv = document.getElementById('messageHistory');
+
+        const messageDiv = document.createElement('div');
+        messageDiv.className = 'message assistant pending';
+
+        const messageContent = document.createElement('div');
+        messageContent.className = 'message-content';
+
+        const avatar = document.createElement('div');
+        avatar.className = 'avatar';
+
+        const bubble = document.createElement('div');
+        bubble.className = 'bubble';
+        bubble.innerHTML = `
+        <div class="answer-section">
+            <div class="answer-header">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M22 11.08V12C21.9988 14.1564 21.3005 16.2547 20.0093 17.9818C18.7182 19.709 16.9033 20.9725 14.8354 21.5839C12.7674 22.1953 10.5573 22.1219 8.53447 21.3746C6.51168 20.6273 4.78465 19.2461 3.61096 17.4371C2.43727 15.628 1.87979 13.4881 2.02168 11.3363C2.16356 9.18455 2.99721 7.13631 4.39828 5.49706C5.79935 3.85781 7.69279 2.71537 9.79619 2.24013C11.8996 1.7649 14.1003 1.98232 16.07 2.86" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                    <path d="M22 4L12 14.01L9 11.01" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                </svg>
+                正在思考...
+            </div>
+            <div class="answer-content">
+                <div class="loading-dots">
+                    <div class="dot"></div>
+                    <div class="dot"></div>
+                    <div class="dot"></div>
+                </div>
+            </div>
+        </div>
+    `;
+
+        messageContent.append(avatar, bubble);
+        messageDiv.appendChild(messageContent);
+        historyDiv.appendChild(messageDiv);
+
+        // 滚动到底部
+        historyDiv.scrollTop = historyDiv.scrollHeight;
+        return messageDiv;
+    }
+
+    // 新增：更新临时消息内容
+    function updatePendingMessage(element, content) {
+        const bubble = element.querySelector('.bubble');
+        if (!bubble) return;
+
+        bubble.innerHTML = `
+        <div class="answer-section">
+            <div class="answer-header">⚠️ 请求异常</div>
+            <div class="answer-content">${content}</div>
+        </div>
+        <div class="message-footer">
+            <span class="message-time">${new Date().toLocaleTimeString()}</span>
+        </div>
+    `;
+        element.classList.remove('pending');
+    }
+
+
+
+    function appendMessage(role, content) {
+        const historyDiv = document.getElementById('messageHistory');
+        const messageDiv = document.createElement('div');
+        messageDiv.className = `message ${role}`;
+        const messageContent = document.createElement('div');
+        messageContent.className = 'message-content';
+
+        // 修改为创建 div 元素来显示头像
+        const avatar = document.createElement('div');
+        avatar.className = 'avatar';
+
+        const bubble = document.createElement('div');
+        bubble.className = 'bubble';
+
+        if (role === 'assistant') {
+            const thinkMatch = content.match(/<think>([\s\S]*?)<\/think>/);
+            let thinkingContent = "";
+            let answerContent = "";
+            if (thinkMatch) {
+                thinkingContent = thinkMatch[1];
+                // 提取正式回答内容，假设 <think> 标签结束后紧接着就是正式回答
+                answerContent = content.slice(content.indexOf('</think>') + '</think>'.length).trim();
+            } else {
+                // 如果没有 <think> 标签，整个内容作为回答内容
+                answerContent = content;
+            }
+
+            if (thinkingContent) {
+                bubble.innerHTML += `
+                <div class="thinking-section">
+                    <div class="thinking-header">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                            <path d="M12 22C17.5228 22 22 17.5228 22 12C22 6.47715 17.5228 2 12 2C6.47715 2 2 6.47715 2 12C2 17.5228 6.47715 22 12 22Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                            <path d="M12 8V12M12 16H12.01" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                        </svg>
+                        思考过程
+                    </div>
+                    <div class="thinking-content">${formatContent(thinkingContent)}</div>
+                </div>
+            `;
+            }
+
+            if (answerContent) {
+                bubble.innerHTML += `
+                <div class="answer-section">
+                    <div class="answer-header">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                            <path d="M22 11.08V12C21.9988 14.1564 21.3005 16.2547 20.0093 17.9818C18.7182 19.709 16.9033 20.9725 14.8354 21.5839C12.7674 22.1953 10.5573 22.1219 8.53447 21.3746C6.51168 20.6273 4.78465 19.2461 3.61096 17.4371C2.43727 15.628 1.87979 13.4881 2.02168 11.3363C2.16356 9.18455 2.99721 7.13631 4.39828 5.49706C5.79935 3.85781 7.69279 2.71537 9.79619 2.24013C11.8996 1.7649 14.1003 1.98232 16.07 2.86" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                            <path d="M22 4L12 14.01L9 11.01" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                        </svg>
+                        正式回答
+                    </div>
+                    <div class="answer-content">${formatContent(answerContent)}</div>
+                </div>
+            `;
+            }
+
+            bubble.innerHTML += `
+            <div class="message-footer">
+                <span class="message-time">${new Date().toLocaleTimeString()}</span>
+                <div class="feedback-buttons">
+                    <button class="feedback-btn like">👍 有帮助</button>
+                    <button class="feedback-btn dislike">👎 需改进</button>
+                </div>
+            </div>
+        `;
+        } else {
+            const messageText = document.createElement('div');
+            messageText.className = 'message-text';
+            messageText.innerHTML = formatContent(content);
+            bubble.appendChild(messageText);
+
+            const messageFooter = document.createElement('div');
+            messageFooter.className = 'message-footer';
+            messageFooter.innerHTML = `
+            <span class="message-time">${new Date().toLocaleTimeString()}</span>
+        `;
+            bubble.appendChild(messageFooter);
+        }
+
+        messageContent.appendChild(avatar);
+        messageContent.appendChild(bubble);
+        messageDiv.appendChild(messageContent);
+        historyDiv.appendChild(messageDiv);
+        historyDiv.scrollTop = historyDiv.scrollHeight;
+    }
+
+
+    function formatContent(content) {
+        // 处理代码块
+        content = content.replace(/```(\w*)([\s\S]*?)```/g, '<pre><code>$2</code></pre>');
+
+        // 处理标题
+        content = content.replace(/### (.*?)\n/g, '<h3>$1</h3>');
+        content = content.replace(/## (.*?)\n/g, '<h2>$1</h2>');
+        content = content.replace(/# (.*?)\n/g, '<h1>$1</h1>');
+
+        // 处理列表
+        content = content.replace(/\n- (.*?)(\n|$)/g, '\n<li>$1</li>');
+        content = content.replace(/<li>.*?<\/li>/g, function(match) {
+            return match.replace(/<li>(.*?)<\/li>/, '<li>$1</li>');
+        });
+        content = content.replace(/(<li>.*?<\/li>)+/g, function(match) {
+            return '<ul>' + match + '</ul>';
+        });
+
+        // 处理换行
+        content = content.replace(/\n/g, '<br>');
+
+        return content;
+    }
+
+    function escapeHtml(unsafe) {
+        return unsafe
+            .replace(/&/g, "&amp;")
+            .replace(/</g, "&lt;")
+            .replace(/>/g, "&gt;")
+            .replace(/"/g, "&quot;")
+            .replace(/'/g, "&#039;");
+    }
+
+
+    // 个人信息弹窗控制
+    let profileModal = document.getElementById("profileModal");
+
+    function toggleProfileModal() {
+        if (profileModal.style.display === "flex") {
+            profileModal.style.display = "none";
+        } else {
+            loadProfileInfo();
+            profileModal.style.display = "flex";
+        }
+    }
+
+    function closeProfileModal() {
+        profileModal.style.display = "none";
+    }
+
+    // 加载用户信息
+    async function loadProfileInfo() {
+        try {
+            const response = await fetch('/api/account/info', {
+                headers: { 'X-User-ID': localStorage.getItem('userId') }
+            });
+            if (!response.ok) {
+                throw new Error(`请求失败，状态码: ${response.status}`);
+            }
+            const data = await response.json();
+            const encryptedPhone = encryptPhoneNumber(data.phoneNumber);
+            document.getElementById('profilePhone').textContent = `手机号：${encryptedPhone}`;
+        } catch (error) {
+            console.error('加载用户信息失败:', error);
+            document.getElementById('profilePhone').textContent = '手机号：加载失败';
+        }
+    }
+
+    // 手机号加密函数
+    function encryptPhoneNumber(phoneNumber) {
+        return phoneNumber.replace(/(\d{3})\d{4}(\d{4})/, '$1****$2');
+    }
+
+    // 清空历史对话
+    async function handleClearHistory() {
+        if (!confirm('确定要清空所有对话记录吗？此操作不可恢复！')) return;
+        try {
+            const response = await fetch(`/api/sessions/clear`, {
+                method: 'DELETE',
+                headers: { 'X-User-ID': localStorage.getItem('userId') }
+            });
+            if (!response.ok) {
+                throw new Error(`清空失败，状态码: ${response.status}`);
+            }
+            alert('已清空所有对话记录');
+            loadSessions();
+        } catch (error) {
+            alert(error.message);
+        }
+    }
+
+    // 显示协议内容
+    async function showAgreement(type) {
+        try {
+            const response = await fetch(`/api/account/agreements/${type}`);
+            if (!response.ok) {
+                throw new Error(`加载协议失败，状态码: ${response.status}`);
+            }
+            const text = await response.text();
+            const title = getAgreementTitle(type);
+            showModal(title, text);
+        } catch (error) {
+            console.error('加载协议失败:', error);
+        }
+    }
+
+    function getAgreementTitle(type) {
+        const titles = {
+            user: '用户协议',
+            privacy: '隐私政策',
+            permissions: '应用权限说明'
+        };
+        return titles[type] || '协议内容';
+    }
+
+    // 显示联系方式
+    async function showContact() {
+        try {
+            const response = await fetch('/api/account/contact');
+            if (!response.ok) {
+                throw new Error(`加载联系方式失败，状态码: ${response.status}`);
+            }
+            const text = await response.text();
+            showModal('联系我们', text);
+        } catch (error) {
+            console.error('加载联系方式失败:', error);
+        }
+    }
+
+    // 创建并显示模态框的通用函数
+    function showModal(title, content) {
+        const modal = document.createElement('div');
+        modal.className = 'modal';
+        modal.innerHTML = `
+        <div class="modal-content" style="max-width: 600px">
+            <span class="close" onclick="this.parentElement.parentElement.remove()">&times;</span>
+            <h3>${title}</h3>
+            <div class="agreement-content">${content}</div>
+        </div>
+    `;
+        document.body.appendChild(modal);
+        modal.style.display = 'block';
+    }
+
+    // 退出登录
+    function handleLogout() {
+        if (!confirm('确定要退出登录吗？')) return;
+        localStorage.removeItem('userId');
+        window.location.href = '/login';
+    }
+
+    // 注销账户
+    async function handleDeleteAccount() {
+        if (!confirm('确定要永久注销账户吗？所有数据将被删除且不可恢复！')) return;
+        try {
+            const response = await fetch(`/api/account`, {
+                method: 'DELETE',
+                headers: { 'X-User-ID': localStorage.getItem('userId') }
+            });
+            if (!response.ok) {
+                throw new Error(`注销失败，状态码: ${response.status}`);
+            }
+            localStorage.removeItem('userId');
+            alert('账户已成功注销');
+            window.location.href = '/login';
+        } catch (error) {
+            alert(error.message);
+        }
+    }
+
+    // 初始化加载用户信息
+    document.addEventListener('DOMContentLoaded', loadProfileInfo);
+
+    //=======================================================================================
+    // 控制菜单显示/隐藏
+    let currentOpenMenu = null;
+
+    function toggleMenu(event, sessionId) {
+        event.stopPropagation();
+        const menu = document.getElementById(`menu-${sessionId}`);
+
+        if (currentOpenMenu && currentOpenMenu !== menu) {
+            currentOpenMenu.style.display = 'none';
+        }
+
+        menu.style.display = menu.style.display === 'block' ? 'none' : 'block';
+        currentOpenMenu = menu.style.display === 'block' ? menu : null;
+    }
+
+    // 点击页面其他位置关闭菜单
+    document.addEventListener('click', (e) => {
+        if (!e.target.closest('.menu-dropdown') && !e.target.closest('.menu-trigger')) {
+            document.querySelectorAll('.menu-dropdown').forEach(menu => {
+                menu.style.display = 'none';
+            });
+            currentOpenMenu = null;
+        }
+    });
+
+    // 重命名会话
+    function renameSession(sessionId) {
+        const sessionItem = document.querySelector(`.session-item[data-id="${sessionId}"]`);
+        const currentName = sessionItem.querySelector('h4').textContent;
+
+        const newName = prompt('请输入新的会话名称：', currentName);
+        if (newName && newName.trim() !== currentName) {
+            fetch(`/api/sessions/${sessionId}`, {
+                method: 'PUT',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-User-ID': localStorage.getItem('userId')
+                },
+                body: JSON.stringify({ newName })
+            })
+                .then(response => {
+                    if (response.ok) {
+                        sessionItem.querySelector('h4').textContent = newName;
+                        if (currentSessionId === sessionId) {
+                            currentSessionName = newName;
+                            document.querySelector('.session-title').textContent = `当前会话: ${newName}`;
+                        }
+                    } else {
+                        throw new Error('重命名失败');
+                    }
+                })
+                .catch(error => {
+                    alert(error.message);
+                });
+        }
+    }
+
+    // 删除会话
+    async function deleteSession(sessionId) {
+        if (!confirm('确定要删除该对话记录吗？此操作不可恢复！')) return;
+        try {
+            const response = await fetch(`/api/sessions/${sessionId}`, {
+                method: 'DELETE',
+                headers: { 'X-User-ID': localStorage.getItem('userId') }
+            });
+
+            if (response.status === 204) {
+                // 删除成功，更新UI
+                document.querySelector(`.session-item[data-id="${sessionId}"]`).remove();
+                if (currentSessionId === sessionId) {
+                    currentSessionId = null;
+                    document.getElementById('messageHistory').innerHTML = '';
+                }
+            } else {
+                const error = await response.text();
+                alert(`删除失败: ${error}`);
+            }
+        } catch (error) {
+            alert('网络错误: ' + error.message);
+        }
+    }
+
+</script>
+</body>
+</html>

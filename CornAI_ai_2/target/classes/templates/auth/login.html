@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head>
+    <title>登录</title>
+    <link rel="stylesheet" th:href="@{/css/auth.css}">
+    <style>
+        /* 添加遮罩层样式 */
+        .overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.5);
+            z-index: 1;
+        }
+    </style>
+</head>
+<!-- 临时添加到HTML中测试
+<img src="/images/assistant-avatar.jpg" style="width: 100px; height: 100px;">  -->
+<body>
+<div class="background"></div>
+<div class="overlay"></div>
+<div class="auth-container">
+    <h2>欢迎来到CornAI</h2>
+    <form id="loginForm" onsubmit="return handleLogin(event)">
+        <div class="input-group">
+            <input type="tel" id="phone" placeholder="手机号" required>
+        </div>
+        <div class="input-group">
+            <input type="password" id="password" placeholder="密码" required>
+        </div>
+        <button type="submit" class="btn-primary">召唤CornAI</button>
+        <div class="auth-link">
+            <a th:href="@{/register}">没有账号？<span>立即注册</span></a>
+        </div>
+    </form>
+</div>
+<script th:src="@{/js/auth.js}"></script>
+</body>
+</html>
